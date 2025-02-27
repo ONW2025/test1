@@ -93,50 +93,6 @@
       position: absolute;
     }
 
-    .station-name-card {
-      font-size: 1em;
-      text-shadow: 1px 1px 10px rgba(0,0,0,0.8), 1px 1px 10px rgba(0,0,0,0.8), 1px 1px 10px rgba(0,0,0,0.8);
-      margin-bottom: 10px;
-      position: relative;
-      overflow: visible;
-      text-align: center;
-    }
-    .station-text {
-      position: relative;
-      z-index: 1;
-    }
-    .station-name-card .edit-temp-btn,
-    .station-name-card .temp-edit-input {
-      display: none;
-    }
-    .station-name-card:hover .edit-temp-btn,
-    .station-name-card:hover .temp-edit-input {
-      display: inline-block;
-    }
-    .station-name-card .edit-temp-btn {
-      position: absolute;
-      top: 30px;
-      right: 30px;
-      z-index: 1000000000;
-      background-color: rgba(255,255,255,0.3);
-      border: 1px solid white;
-      color: white;
-      cursor: pointer;
-      padding: 3px 6px;
-      font-size: 0.8em;
-    }
-    .station-name-card .temp-edit-input {
-      position: absolute;
-      top: 100%;
-      right: 60px;
-      z-index: 100000;
-      margin-top: 10px;
-      padding: 5px;
-      border: 1px solid #ccc;
-      font-size: 0.9em;
-      text-align: center;
-      width: 60px;
-    }
     .temperature-card {
       font-family: 'Roboto', sans-serif;
       font-size: 2em;
@@ -233,95 +189,69 @@
 
     <script>
       /**********************************
-       * TEMPERATURE SCRAPING SCRIPT
+       * NWS OBSERVATION SCRAPER SCRIPT
        **********************************/
+      
+      // Fetches the observation page for the given station code and scrapes the latest temperature.
+      async function fetchObservation(stationCode) {
+        try {
+          // Construct the URL using the provided station code.
+          const url = `https://www.weather.gov/wrh/LowTimeseries?site=${stationCode}`;
+          const response = await fetch(url);
+          const html = await response.text();
+          
+          // Parse the returned HTML.
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
 
-      // Array of station IDs
-      const stationIds = [
-        'KOHCHILL102', 'KOHCOLUM839', 'KOHDAYTO48', 'KOHCINCI470', 'KOHGALLI12', 'KOHTOLED157', 'KOHCLEVE358',
-        'KOHYOUNG19', 'KOHSTCLA12', 'KOHMARIE95', 'KOHDEFIA24', 'KOHCELIN50', 'KOHLIMA26', 'KOHFINDL106',
-        'KOHBELLE16', 'KOHMARIO107', 'KOHWILMI89', 'KOHGEORG3', 'KOHPORTS28', 'KOHLOGAN27', 'KOHZANES81',
-        'KOHMOUNT134', 'KOHMANSF8', 'KOHSANDU69', 'KOHASHTA21', 'KOHAKRON234', 'KOHCANTO106', 'KOHCOSHO14'
-      ];
+          // Look for a table that contains the word "Temp".
+          const tables = doc.querySelectorAll('table');
+          let targetTable = null;
+          tables.forEach(table => {
+            if (table.textContent.toLowerCase().includes('temp')) {
+              targetTable = table;
+            }
+          });
+          
+          if (!targetTable) {
+            throw new Error("No table with temperature data found.");
+          }
 
-      // Mapping of station IDs to friendly names
-      const stationNames = {
-        'KOHCHILL102': 'Chillicothe',
-        'KOHCOLUM839': 'Columbus',
-        'KOHDAYTO48': 'Dayton',
-        'KOHCINCI470': 'Cincinnati',
-        'KOHGALLI12': 'Gallipolis',
-        'KOHTOLED157': 'Toledo',
-        'KOHCLEVE358': 'Cleveland',
-        'KOHYOUNG19': 'Youngstown',
-        'KOHSTCLA12': 'St. Clairsville',
-        'KOHMARIE95': 'Marietta',
-        'KOHDEFIA24': 'Defiance',
-        'KOHCELIN50': 'Celina',
-        'KOHLIMA26': 'Lima',
-        'KOHFINDL106': 'Findlay',
-        'KOHBELLE16': 'Bellefontaine',
-        'KOHMARIO107': 'Marion',
-        'KOHWILMI89': 'Wilmington',
-        'KOHGEORG3': 'Georgetown',
-        'KOHPORTS28': 'Portsmouth',
-        'KOHLOGAN27': 'Logan',
-        'KOHZANES81': 'Zanesville',
-        'KOHMOUNT134': 'Mt. Vernon',
-        'KOHMANSF8': 'Mansfield',
-        'KOHSANDU69': 'Sandusky',
-        'KOHASHTA21': 'Ashtabula',
-        'KOHAKRON234': 'Akron',
-        'KOHCANTO106': 'Canton',
-        'KOHCOSHO14': 'Coshocton'
-      };
+          // Get all rows from the table.
+          const rows = targetTable.querySelectorAll('tr');
+          if (rows.length < 2) {
+            throw new Error("Not enough rows in the temperature data table.");
+          }
 
-      // Mapping of station IDs to positions on the map
-      const stationPositions = {
-        'KOHCHILL102': { top: '70%', left: '45%' },
-        'KOHCOLUM839': { top: '54%', left: '44.5%' },
-        'KOHDAYTO48': { top: '58.5%', left: '30%' },
-        'KOHCINCI470': { top: '74.5%', left: '26%' },
-        'KOHGALLI12': { top: '84.5%', left: '55%' },
-        'KOHTOLED157': { top: '7.5%', left: '38%' },
-        'KOHCLEVE358': { top: '11.5%', left: '61%' },
-        'KOHYOUNG19': { top: '23%', left: '74%' },
-        'KOHSTCLA12': { top: '50%', left: '72%' },
-        'KOHMARIE95': { top: '67%', left: '64.5%' },
-        'KOHDEFIA24': { top: '17%', left: '27.5%' },
-        'KOHCELIN50': { top: '37%', left: '25.5%' },
-        'KOHLIMA26': { top: '32%', left: '31%' },
-        'KOHFINDL106': { top: '24%', left: '37%' },
-        'KOHBELLE16': { top: '42%', left: '35.5%' },
-        'KOHMARIO107': { top: '36%', left: '43.5%' },
-        'KOHWILMI89': { top: '68%', left: '35%' },
-        'KOHGEORG3': { top: '82.5%', left: '34%' },
-        'KOHPORTS28': { top: '85%', left: '45%' },
-        'KOHLOGAN27': { top: '65%', left: '52.5%' },
-        'KOHZANES81': { top: '54%', left: '57.5%' },
-        'KOHMOUNT134': { top: '42%', left: '51.5%' },
-        'KOHMANSF8': { top: '31%', left: '51%' },
-        'KOHSANDU69': { top: '14%', left: '49%' },
-        'KOHASHTA21': { top: '2%', left: '74%' },
-        'KOHAKRON234': { top: '23%', left: '64%' },
-        'KOHCANTO106': { top: '30.5%', left: '65.5%' },
-        'KOHCOSHO14': { top: '44.5%', left: '60%' }
-      };
+          // Assume the first row is the header; identify the temperature column index.
+          const headerCells = rows[0].querySelectorAll('th,td');
+          let tempIndex = -1;
+          headerCells.forEach((cell, index) => {
+            if (cell.textContent.trim().toLowerCase().includes('temp')) {
+              tempIndex = index;
+            }
+          });
+          if (tempIndex === -1) {
+            throw new Error("Temperature column not found in header.");
+          }
 
-      // List of disabled stations (if any)
-      const disabledStations = [
-        'STATION3', 'STATION4', 'STATION5', 'STATION6', 'STATION7', 'STATION8', 'STATION9', 'STATION10',
-        'STATION11', 'STATION12', 'STATION13', 'STATION14', 'STATION15', 'STATION16', 'STATION17', 'STATION18',
-        'STATION19', 'STATION20', 'STATION21', 'STATION22', 'STATION23', 'STATION24', 'STATION25', 'STATION26',
-        'STATION27', 'STATION28'
-      ];
+          // Assume the last row holds the most recent observation.
+          const latestRow = rows[rows.length - 1];
+          const cells = latestRow.querySelectorAll('td');
+          if (cells.length <= tempIndex) {
+            throw new Error("Temperature cell not found in the latest row.");
+          }
 
-      // Object to hold the latest scraped temperature readings
-      const stationTemperatures = {};
-      // Object to hold any manual temperature overrides
-      const manualTemperatures = {};
+          // Extract and return the temperature value.
+          const temperature = cells[tempIndex].textContent.trim();
+          return temperature;
+        } catch (error) {
+          console.error("Error fetching observation:", error);
+          return "N/A";
+        }
+      }
 
-      // Function to choose a color based on the temperature value.
+      // Determines a color based on the temperature value.
       function getTemperatureColor(temp) {
         if (temp <= 0) return 'rgb(244, 101, 255)';
         if (temp <= 9) return 'rgb(184, 0, 200)';
@@ -337,161 +267,30 @@
         return 'rgb(255, 129, 129)';
       }
 
-      // --- Mapping from your station IDs to NWS site codes (placeholders) ---
-      // For example, Dayton's code is KDAY.
-      const stationNwsCodes = {
-        'KOHCHILL102': 'kchi',
-        'KOHCOLUM839': 'kcol',
-        'KOHDAYTO48': 'kday',
-        'KOHCINCI470': 'kcinc',
-        'KOHGALLI12':  'kgall',
-        'KOHTOLED157': 'ktole',
-        'KOHCLEVE358': 'kclev',
-        'KOHYOUNG19':  'kyoung',
-        'KOHSTCLA12':  'kstcl',
-        'KOHMARIE95':  'kmari',
-        'KOHDEFIA24':  'kdefi',
-        'KOHCELIN50':  'kceli',
-        'KOHLIMA26':   'klima',
-        'KOHFINDL106': 'kfind',
-        'KOHBELLE16':  'kbell',
-        'KOHMARIO107': 'kmari2',
-        'KOHWILMI89':  'kwilm',
-        'KOHGEORG3':   'kgeor',
-        'KOHPORTS28':  'kport',
-        'KOHLOGAN27':  'kloga',
-        'KOHZANES81':  'kzane',
-        'KOHMOUNT134': 'kmoun',
-        'KOHMANSF8':   'kmans',
-        'KOHSANDU69':  'ksand',
-        'KOHASHTA21':  'kash',
-        'KOHAKRON234': 'kakro',
-        'KOHCANTO106': 'kcant',
-        'KOHCOSHO14':  'kcosh'
-      };
-
-      // --- Function to fetch and scrape temperature from the NWS timeseries page ---
-      function fetchWeatherScrape(stationId) {
-        const nwsCode = stationNwsCodes[stationId];
-        if (!nwsCode) {
-          console.error("No NWS code defined for station:", stationId);
-          stationTemperatures[stationId] = { value: 'N/A', color: 'white' };
-          return Promise.resolve();
-        }
-        // Build the URL – add a proxy prefix here if needed to bypass CORS.
-        const url = `https://www.weather.gov/wrh/timeseries?site=${nwsCode}`;
-        return fetch(url)
-          .then(response => response.text())
-          .then(htmlText => {
-            /*
-              Try to extract the temperature using a regex that looks for a number followed by "°F".
-              This regex looks for a pattern like: 72°F or -5°F.
-            */
-            const tempRegex = /(-?\d+(?:\.\d+)?)\s*°F/;
-            const match = htmlText.match(tempRegex);
-            if (match && match[1]) {
-              let tempValue = match[1];
-              const numericTemp = parseFloat(tempValue);
-              const color = isNaN(numericTemp) ? 'white' : getTemperatureColor(numericTemp);
-              stationTemperatures[stationId] = { value: tempValue, color: color };
-            } else {
-              console.error("Temperature not found in the HTML for station:", stationId);
-              stationTemperatures[stationId] = { value: 'N/A', color: 'white' };
-            }
-          })
-          .catch(error => {
-            console.error(`Error scraping weather for station ${stationId}:`, error);
-            stationTemperatures[stationId] = { value: 'N/A', color: 'white' };
-          });
-      }
-
-      // --- Update weather information for all stations ---
+      // Updates the weather display using the current station code.
       async function updateWeather() {
-        const weatherPromises = stationIds
-          .filter(id => !disabledStations.includes(id))
-          .map(id => fetchWeatherScrape(id));
-        await Promise.all(weatherPromises);
+        const stationCodeInput = document.getElementById("stationCodeInput");
+        const stationCode = stationCodeInput.value.trim();
+        const temperature = await fetchObservation(stationCode);
+        const stationNameElement = document.getElementById("station-name");
+        const temperatureElement = document.getElementById("temperature");
 
-        stationIds.forEach((stationId, index) => {
-          if (disabledStations.includes(stationId)) return;
+        // Update the station name display.
+        stationNameElement.textContent = stationCode.toUpperCase();
 
-          const stationNameElement = document.getElementById(`station-name-${index + 1}`);
-          const temperatureElement = document.getElementById(`temperature-${index + 1}`);
-          const { value, color } = stationTemperatures[stationId] || {};
-          const displayValue = (manualTemperatures[stationId] !== undefined)
-            ? manualTemperatures[stationId]
-            : (value || 'Loading...');
+        // If the temperature is numeric, get a corresponding color.
+        let numericTemp = parseFloat(temperature);
+        let color = !isNaN(numericTemp) ? getTemperatureColor(numericTemp) : 'white';
 
-          stationNameElement.innerHTML = `
-            <div class="station-name-card">
-              <span class="station-text">${stationNames[stationId]}</span>
-              <button class="edit-temp-btn">Edit</button>
-              <input type="text" class="temp-edit-input" placeholder="Enter temp" />
-            </div>
-          `;
-          temperatureElement.innerHTML = `
-            <div class="temperature-card" style="color: ${color};">
-              <span class="temp-value">${displayValue}</span>
-            </div>
-          `;
-
-          // Position the station on the map.
-          const { top, left } = stationPositions[stationId];
-          stationNameElement.style.top = top;
-          stationNameElement.style.left = left;
-          stationNameElement.style.transform = "translateX(-50%)";
-          temperatureElement.style.top = top;
-          temperatureElement.style.left = left;
-          temperatureElement.style.transform = "translateX(-50%)";
-
-          // Add event listeners for manual temperature editing.
-          const editButton = stationNameElement.querySelector('.edit-temp-btn');
-          const inputField = stationNameElement.querySelector('.temp-edit-input');
-          const tempCard = temperatureElement.firstElementChild;
-          const tempValueSpan = tempCard.querySelector('.temp-value');
-
-          editButton.addEventListener('click', () => {
-            inputField.style.display = 'inline-block';
-            inputField.value = tempValueSpan.textContent;
-            inputField.focus();
-          });
-
-          inputField.addEventListener('blur', () => {
-            let newTemp = inputField.value.trim();
-            if (newTemp !== '') {
-              manualTemperatures[stationId] = newTemp;
-              tempValueSpan.textContent = newTemp;
-              let numericTemp = parseFloat(newTemp);
-              if (!isNaN(numericTemp)) {
-                let newColor = getTemperatureColor(numericTemp);
-                tempCard.style.color = newColor;
-              }
-            }
-            inputField.style.display = 'none';
-          });
-
-          inputField.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              inputField.blur();
-            }
-          });
-
-          tempCard.addEventListener('click', () => {
-            let newTemp = prompt(`Enter new temperature for ${stationNames[stationId]}:`, tempValueSpan.textContent);
-            if (newTemp !== null && newTemp.trim() !== '') {
-              manualTemperatures[stationId] = newTemp;
-              tempValueSpan.textContent = newTemp;
-              let numericTemp = parseFloat(newTemp);
-              if (!isNaN(numericTemp)) {
-                let newColor = getTemperatureColor(numericTemp);
-                tempCard.style.color = newColor;
-              }
-            }
-          });
-        });
+        // Update the temperature display.
+        temperatureElement.innerHTML = `
+          <div class="temperature-card" style="color: ${color};">
+            <span class="temp-value">${temperature}</span>
+          </div>
+        `;
       }
 
-      // --- Update Timestamp ---
+      // Updates the timestamp in the upper left (or as positioned) element.
       function updateTimestamp() {
         const timestampElement = document.getElementById('timestamp');
         const now = new Date();
@@ -506,25 +305,57 @@
         timestampElement.textContent = formattedTimestamp;
       }
 
-      // --- Initialize the placeholders and start updates ---
       document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('weather-info-container');
-        stationIds.forEach((stationId, index) => {
-          if (!disabledStations.includes(stationId)) {
-            const nameDiv = document.createElement('div');
-            nameDiv.id = `station-name-${index + 1}`;
-            nameDiv.classList.add('weather-card');
-            container.appendChild(nameDiv);
-            
-            const tempDiv = document.createElement('div');
-            tempDiv.id = `temperature-${index + 1}`;
-            tempDiv.classList.add('weather-card');
-            container.appendChild(tempDiv);
+
+        // Create a station code input area.
+        const codeInputContainer = document.createElement('div');
+        codeInputContainer.id = "station-code-input-container";
+        codeInputContainer.style.position = "absolute";
+        codeInputContainer.style.top = "5px";
+        codeInputContainer.style.left = "5px";
+        codeInputContainer.style.zIndex = "100000";
+        codeInputContainer.style.background = "rgba(0,0,0,0.5)";
+        codeInputContainer.style.padding = "10px";
+        codeInputContainer.style.borderRadius = "5px";
+        codeInputContainer.innerHTML = `
+          <label for="stationCodeInput" style="color:white; font-size: 1em;">NWS Station Code:</label>
+          <input type="text" id="stationCodeInput" value="kday" style="padding:5px; font-size: 1em;"/>
+          <button id="stationCodeSubmit" style="padding:5px; font-size: 1em;">Update</button>
+        `;
+        container.appendChild(codeInputContainer);
+
+        // Create an element to display the station name.
+        const nameDiv = document.createElement('div');
+        nameDiv.id = "station-name";
+        nameDiv.classList.add('weather-card');
+        nameDiv.style.top = "50%";
+        nameDiv.style.left = "20%";
+        nameDiv.style.transform = "translateX(-50%)";
+        container.appendChild(nameDiv);
+
+        // Create an element to display the temperature.
+        const tempDiv = document.createElement('div');
+        tempDiv.id = "temperature";
+        tempDiv.classList.add('weather-card');
+        tempDiv.style.top = "50%";
+        tempDiv.style.left = "80%";
+        tempDiv.style.transform = "translateX(-50%)";
+        container.appendChild(tempDiv);
+
+        // Update weather when the button is clicked.
+        document.getElementById("stationCodeSubmit").addEventListener("click", updateWeather);
+        // Also update when the user presses Enter in the station code input.
+        document.getElementById("stationCodeInput").addEventListener("keypress", function(e) {
+          if (e.key === 'Enter') {
+            updateWeather();
           }
         });
+
         updateWeather();
-        // Refresh weather every 100 minutes (adjust if needed)
-        setInterval(updateWeather, 100 * 60 * 1000);
+        // Update every 10 minutes.
+        setInterval(updateWeather, 10 * 60 * 1000);
+
         updateTimestamp();
         setInterval(updateTimestamp, 60 * 1000);
       });
@@ -573,7 +404,7 @@
   </div>
 
   <script>
-    // Remove blur when the correct password is entered.
+    // When the correct password is entered, remove the blur and hide the overlay.
     document.getElementById('passwordSubmit').addEventListener('click', function() {
       const passwordInput = document.getElementById('passwordInput');
       const passwordError = document.getElementById('passwordError');
