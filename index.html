@@ -1,427 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Weather Information</title>
-  
-  <!-- Include html2canvas from CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Overpass:wght@900&display=swap');
-
-    /* Use imported font for everything */
-    * {
-      font-family: 'Overpass Black', sans-serif !important;
-    }
-
-    body {
-      margin: 0;
-      background: #000;
-      overflow: auto;
-    }
-
-    /* Wrap all content (except password overlay) to allow blurring */
-    #mainContent {
-      filter: blur(10px);
-      transition: filter 0.3s ease;
-    }
-
-    /* The #map-container is fixed at our base resolution (e.g., 1920×1080)
-       and then scaled to 85% of the viewport width */
-    #map-container {
-      position: relative;
-      width: 1920px;
-      height: 1080px;
-      margin: 0 auto;
-      transform: scale(calc(85vw / 1920));
-      transform-origin: top center;
-    }
-
-    /* The map image fills the container */
-    #map-image {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    /* Overlay sits over the map image */
-    #overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-    }
-
-    /* Weather info container and timestamp inside the overlay */
-    #weather-info-container {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      pointer-events: auto;
-    }
-
-    /* Adjust timestamp positioning */
-    #timestamp {
-      position: absolute;
-      bottom: 90%;
-      left: 14.5%;
-      font-family: 'Overpass', sans-serif;
-      font-size: 1.5em;
-      color: white;
-      text-shadow: 0 0 10px rgba(0,0,0,0.8);
-      background-color: transparent;
-      padding: 10px 20px;
-      border-radius: 5px;
-      text-align: left;
-      pointer-events: auto;
-    }
-
-    /* --- Weather card styling --- */
-    .weather-card {
-      font-size: 1.5em;
-      text-shadow: 3px 1px 1px rgba(0,0,0,0.7);
-      color: white;
-      padding: 20px;
-      margin: 10px;
-      text-align: center;
-      background: rgba(0,0,0,0);
-      border-radius: 10px;
-      position: absolute;
-    }
-
-    .temperature-card {
-      font-family: 'Roboto', sans-serif;
-      font-size: 2em;
-      text-shadow: 0 0 10px rgba(0,0,0,0.8), 0 0 10px rgba(0,0,0,0.8), 0 0 10px rgba(0,0,0,0.8);
-      color: white;
-      margin-top: 25px;
-      position: relative;
-      text-align: center;
-    }
-
-    /* --- Custom Context Menu Styling --- */
-    #customContextMenu {
-      position: fixed;
-      z-index: 10000;
-      background: #333;
-      color: #fff;
-      border: 1px solid #fff;
-      padding: 5px 0;
-      border-radius: 5px;
-      display: none;
-      width: 150px;
-    }
-    #customContextMenu ul {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-    }
-    #customContextMenu li {
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-    #customContextMenu li:hover {
-      background-color: #444;
-    }
-
-    /* -------------------------
-       PASSWORD & BLUR STYLES
-       ------------------------- */
-    /* Password Overlay */
-    #passwordOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 100000;
-    }
-    #passwordBox {
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    }
-    #passwordBox input {
-      padding: 10px;
-      font-size: 16px;
-      margin-bottom: 10px;
-      width: 200px;
-    }
-    #passwordBox button {
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <title>Latest Temperature Scraper</title>
 </head>
 <body>
-
-  <!-- Main Content Wrapped for Blurring -->
-  <div id="mainContent">
-    <!-- The main container (scaled) -->
-    <div id="map-container">
-      <img id="map-image" src="blank map tyler (1).png" alt="Map" />
-      <div id="overlay">
-        <div id="weather-info-container"></div>
-        <div id="timestamp"></div>
-      </div>
-    </div>
-
-    <!-- Tooltip element -->
-    <div id="customTooltip"></div>
-
-    <!-- Custom Right-Click Context Menu -->
-    <div id="customContextMenu">
-      <ul>
-        <li id="saveGraphicOption">Save Graphic</li>
-      </ul>
-    </div>
-
-    <script>
-      /**********************************
-       * NWS OBSERVATION SCRAPER SCRIPT
-       **********************************/
-      
-      // Fetches the observation page for the given station code and scrapes the latest temperature.
-      async function fetchObservation(stationCode) {
-        try {
-          // Construct the URL using the provided station code.
-          const url = `https://www.weather.gov/wrh/LowTimeseries?site=${stationCode}`;
-          const response = await fetch(url);
-          const html = await response.text();
-          
-          // Parse the returned HTML.
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-
-          // Look for a table that contains the word "Temp".
-          const tables = doc.querySelectorAll('table');
-          let targetTable = null;
-          tables.forEach(table => {
-            if (table.textContent.toLowerCase().includes('temp')) {
-              targetTable = table;
-            }
-          });
-          
-          if (!targetTable) {
-            throw new Error("No table with temperature data found.");
-          }
-
-          // Get all rows from the table.
-          const rows = targetTable.querySelectorAll('tr');
-          if (rows.length < 2) {
-            throw new Error("Not enough rows in the temperature data table.");
-          }
-
-          // Assume the first row is the header; identify the temperature column index.
-          const headerCells = rows[0].querySelectorAll('th,td');
-          let tempIndex = -1;
-          headerCells.forEach((cell, index) => {
-            if (cell.textContent.trim().toLowerCase().includes('temp')) {
-              tempIndex = index;
-            }
-          });
-          if (tempIndex === -1) {
-            throw new Error("Temperature column not found in header.");
-          }
-
-          // Assume the last row holds the most recent observation.
-          const latestRow = rows[rows.length - 1];
-          const cells = latestRow.querySelectorAll('td');
-          if (cells.length <= tempIndex) {
-            throw new Error("Temperature cell not found in the latest row.");
-          }
-
-          // Extract and return the temperature value.
-          const temperature = cells[tempIndex].textContent.trim();
-          return temperature;
-        } catch (error) {
-          console.error("Error fetching observation:", error);
-          return "N/A";
-        }
-      }
-
-      // Determines a color based on the temperature value.
-      function getTemperatureColor(temp) {
-        if (temp <= 0) return 'rgb(244, 101, 255)';
-        if (temp <= 9) return 'rgb(184, 0, 200)';
-        if (temp <= 19) return 'rgb(0, 32, 224)';
-        if (temp <= 29) return 'rgb(0, 114, 255)';
-        if (temp <= 39) return 'rgb(67, 255, 253)';
-        if (temp <= 49) return 'rgb(156, 255, 0)';
-        if (temp <= 59) return 'rgb(255, 252, 0)';
-        if (temp <= 69) return 'rgb(255, 156, 0)';
-        if (temp <= 79) return 'rgb(255, 90, 0)';
-        if (temp <= 89) return 'rgb(255, 0, 0)';
-        if (temp <= 99) return 'rgb(160, 0, 0)';
-        return 'rgb(255, 129, 129)';
-      }
-
-      // Updates the weather display using the current station code.
-      async function updateWeather() {
-        const stationCodeInput = document.getElementById("stationCodeInput");
-        const stationCode = stationCodeInput.value.trim();
-        const temperature = await fetchObservation(stationCode);
-        const stationNameElement = document.getElementById("station-name");
-        const temperatureElement = document.getElementById("temperature");
-
-        // Update the station name display.
-        stationNameElement.textContent = stationCode.toUpperCase();
-
-        // If the temperature is numeric, get a corresponding color.
-        let numericTemp = parseFloat(temperature);
-        let color = !isNaN(numericTemp) ? getTemperatureColor(numericTemp) : 'white';
-
-        // Update the temperature display.
-        temperatureElement.innerHTML = `
-          <div class="temperature-card" style="color: ${color};">
-            <span class="temp-value">${temperature}</span>
-          </div>
-        `;
-      }
-
-      // Updates the timestamp in the upper left (or as positioned) element.
-      function updateTimestamp() {
-        const timestampElement = document.getElementById('timestamp');
-        const now = new Date();
-        const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
-        const month = now.toLocaleDateString('en-US', { month: 'long' });
-        const date = now.getDate();
-        const suffix = (date % 10 === 1 && date !== 11) ? 'st' :
-                       (date % 10 === 2 && date !== 12) ? 'nd' :
-                       (date % 10 === 3 && date !== 13) ? 'rd' : 'th';
-        const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const formattedTimestamp = `${dayOfWeek}, ${month} ${date}${suffix}: ${formattedTime}`;
-        timestampElement.textContent = formattedTimestamp;
-      }
-
-      document.addEventListener('DOMContentLoaded', () => {
-        const container = document.getElementById('weather-info-container');
-
-        // Create a station code input area.
-        const codeInputContainer = document.createElement('div');
-        codeInputContainer.id = "station-code-input-container";
-        codeInputContainer.style.position = "absolute";
-        codeInputContainer.style.top = "5px";
-        codeInputContainer.style.left = "5px";
-        codeInputContainer.style.zIndex = "100000";
-        codeInputContainer.style.background = "rgba(0,0,0,0.5)";
-        codeInputContainer.style.padding = "10px";
-        codeInputContainer.style.borderRadius = "5px";
-        codeInputContainer.innerHTML = `
-          <label for="stationCodeInput" style="color:white; font-size: 1em;">NWS Station Code:</label>
-          <input type="text" id="stationCodeInput" value="kday" style="padding:5px; font-size: 1em;"/>
-          <button id="stationCodeSubmit" style="padding:5px; font-size: 1em;">Update</button>
-        `;
-        container.appendChild(codeInputContainer);
-
-        // Create an element to display the station name.
-        const nameDiv = document.createElement('div');
-        nameDiv.id = "station-name";
-        nameDiv.classList.add('weather-card');
-        nameDiv.style.top = "50%";
-        nameDiv.style.left = "20%";
-        nameDiv.style.transform = "translateX(-50%)";
-        container.appendChild(nameDiv);
-
-        // Create an element to display the temperature.
-        const tempDiv = document.createElement('div');
-        tempDiv.id = "temperature";
-        tempDiv.classList.add('weather-card');
-        tempDiv.style.top = "50%";
-        tempDiv.style.left = "80%";
-        tempDiv.style.transform = "translateX(-50%)";
-        container.appendChild(tempDiv);
-
-        // Update weather when the button is clicked.
-        document.getElementById("stationCodeSubmit").addEventListener("click", updateWeather);
-        // Also update when the user presses Enter in the station code input.
-        document.getElementById("stationCodeInput").addEventListener("keypress", function(e) {
-          if (e.key === 'Enter') {
-            updateWeather();
-          }
-        });
-
-        updateWeather();
-        // Update every 10 minutes.
-        setInterval(updateWeather, 10 * 60 * 1000);
-
-        updateTimestamp();
-        setInterval(updateTimestamp, 60 * 1000);
-      });
-
-      /* --- Custom Right-Click Context Menu Script --- */
-      const mapContainer = document.getElementById("map-container");
-      const contextMenu = document.getElementById("customContextMenu");
-      const saveOption = document.getElementById("saveGraphicOption");
-
-      mapContainer.addEventListener("contextmenu", function(e) {
-        e.preventDefault();
-        contextMenu.style.top = e.clientY + "px";
-        contextMenu.style.left = e.clientX + "px";
-        contextMenu.style.display = "block";
-      });
-
-      document.addEventListener("click", function(e) {
-        contextMenu.style.display = "none";
-      });
-
-      saveOption.addEventListener("click", function(e) {
-        e.stopPropagation();
-        const originalTransform = mapContainer.style.transform;
-        mapContainer.style.transform = "none";
-
-        html2canvas(mapContainer).then(function(canvas) {
-           mapContainer.style.transform = originalTransform;
-           const link = document.createElement("a");
-           link.download = "graphic.png";
-           link.href = canvas.toDataURL("image/png");
-           link.click();
-        });
-      });
-    </script>
-  </div>
-
-  <!-- Password Overlay -->
-  <div id="passwordOverlay">
-    <div id="passwordBox">
-      <h2>Please Enter Password</h2>
-      <input type="password" id="passwordInput" placeholder="Password" />
-      <br/>
-      <button id="passwordSubmit">Submit</button>
-      <p id="passwordError" style="color:red; display:none;">Incorrect Password</p>
-    </div>
-  </div>
+  <h1>Latest Temperature Observation</h1>
+  <div id="result">Fetching data...</div>
 
   <script>
-    // When the correct password is entered, remove the blur and hide the overlay.
-    document.getElementById('passwordSubmit').addEventListener('click', function() {
-      const passwordInput = document.getElementById('passwordInput');
-      const passwordError = document.getElementById('passwordError');
-      if (passwordInput.value === "Belpark#2025!") {
-        document.getElementById('mainContent').style.filter = "none";
-        document.getElementById('passwordOverlay').style.display = "none";
-      } else {
-        passwordError.style.display = "block";
-      }
-    });
-    // Allow pressing Enter to submit.
-    document.getElementById('passwordInput').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        document.getElementById('passwordSubmit').click();
-      }
-    });
+    // Using a CORS proxy to bypass cross-origin restrictions.
+    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+    const targetUrl = 'https://www.weather.gov/wrh/LowTimeseries?site=kday';
+
+    fetch(proxyUrl + targetUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not OK');
+        }
+        return response.text();
+      })
+      .then(data => {
+        // Parse the returned HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(data, 'text/html');
+
+        // Get all table cells
+        const cells = Array.from(doc.querySelectorAll('td'));
+        let temperature = null;
+
+        // Loop over each cell and try to identify one that contains only a number.
+        for (let cell of cells) {
+          const text = cell.textContent.trim();
+          // If the cell text consists only of digits, assume it's the temperature.
+          if (/^\d+$/.test(text)) {
+            temperature = text;
+            break;
+          }
+        }
+
+        if (temperature) {
+          document.getElementById('result').textContent = 'Latest Temperature: ' + temperature;
+        } else {
+          document.getElementById('result').textContent = 'Temperature element not found. Please adjust your selector.';
+        }
+      })
+      .catch(error => {
+        document.getElementById('result').textContent = 'Error fetching data: ' + error;
+        console.error('Fetch error:', error);
+      });
   </script>
-  
 </body>
 </html>
