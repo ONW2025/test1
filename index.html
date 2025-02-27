@@ -21,28 +21,24 @@
         return response.text();
       })
       .then(data => {
+        // Log the fetched HTML (for debugging)
+        console.log("Fetched HTML:", data);
+
         // Parse the returned HTML
         const parser = new DOMParser();
         const doc = parser.parseFromString(data, 'text/html');
 
-        // Get all table cells
-        const cells = Array.from(doc.querySelectorAll('td'));
-        let temperature = null;
+        // Use a selector to target the temperature cell.
+        // The table has two header rows, so the first data row is the third <tr>
+        // and the temperature is in the second <td> of that row.
+        const tempElement = doc.querySelector('#OBS_DATA tbody tr:nth-child(3) td:nth-child(2)');
 
-        // Loop over each cell and try to identify one that contains only a number.
-        for (let cell of cells) {
-          const text = cell.textContent.trim();
-          // If the cell text consists only of digits, assume it's the temperature.
-          if (/^\d+$/.test(text)) {
-            temperature = text;
-            break;
-          }
-        }
-
-        if (temperature) {
+        if (tempElement) {
+          const temperature = tempElement.textContent.trim();
           document.getElementById('result').textContent = 'Latest Temperature: ' + temperature;
         } else {
-          document.getElementById('result').textContent = 'Temperature element not found. Please adjust your selector.';
+          document.getElementById('result').textContent =
+            'Temperature element not found. Please check the HTML structure and adjust the selector if needed.';
         }
       })
       .catch(error => {
